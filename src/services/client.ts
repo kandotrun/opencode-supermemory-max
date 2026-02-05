@@ -2,14 +2,13 @@ import Supermemory from "supermemory";
 import { CONFIG, SUPERMEMORY_API_KEY, isConfigured } from "../config.js";
 import { log } from "./logger.js";
 import type {
-  MemoryType,
-  ConversationMessage,
   ConversationIngestResponse,
+  ConversationMessage,
+  MemoryType,
 } from "../types/index.js";
 
-const SUPERMEMORY_API_URL = "https://api.supermemory.ai";
-
 const TIMEOUT_MS = 30000;
+const MAX_CONVERSATION_CHARS = 100_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -22,6 +21,31 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export class SupermemoryClient {
   private client: Supermemory | null = null;
+
+  private formatConversationMessage(message: ConversationMessage): string {
+    const content =
+      typeof message.content === "string"
+        ? message.content
+        : message.content
+            .map((part) =>
+              part.type === "text"
+                ? part.text
+                : `[image] ${part.imageUrl.url}`
+            )
+            .join("\n");
+
+    const trimmed = content.trim();
+    if (trimmed.length === 0) {
+      return `[${message.role}]`;
+    }
+    return `[${message.role}] ${trimmed}`;
+  }
+
+  private formatConversationTranscript(messages: ConversationMessage[]): string {
+    return messages
+      .map((message, idx) => `${idx + 1}. ${this.formatConversationMessage(message)}`)
+      .join("\n");
+  }
 
   private getClient(): Supermemory {
     if (!this.client) {
@@ -145,40 +169,78 @@ export class SupermemoryClient {
     containerTags: string[],
     metadata?: Record<string, string | number | boolean>
   ) {
-    log("ingestConversation: start", { conversationId, messageCount: messages.length });
-    try {
-      const response = await withTimeout(
-        fetch(`${SUPERMEMORY_API_URL}/conversations`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${SUPERMEMORY_API_KEY}`,
-          },
-          body: JSON.stringify({
-            conversationId,
-            messages,
-            containerTags,
-            metadata,
-          }),
-        }),
-        TIMEOUT_MS
-      );
+    log("ingestConversation: start", {
+      conversationId,
+      messageCount: messages.length,
+      containerTags,
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        log("ingestConversation: error response", { status: response.status, error: errorText });
-        return { success: false as const, error: `HTTP ${response.status}: ${errorText}` };
-      }
-
-      const result = await response.json() as ConversationIngestResponse;
-      log("ingestConversation: success", { conversationId, status: result.status });
-      return { success: true as const, ...result };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log("ingestConversation: error", { error: errorMessage });
-      return { success: false as const, error: errorMessage };
+    if (messages.length === 0) {
+      return { success: false as const, error: "No messages to ingest" };
     }
+
+    const uniqueTags = [...new Set(containerTags)].filter((tag) => tag.length > 0);
+    if (uniqueTags.length === 0) {
+      return { success: false as const, error: "At least one containerTag is required" };
+    }
+
+    const transcript = this.formatConversationTranscript(messages);
+    const rawContent = `[Conversation ${conversationId}]\n${transcript}`;
+    const content =
+      rawContent.length > MAX_CONVERSATION_CHARS
+        ? `${rawContent.slice(0, MAX_CONVERSATION_CHARS)}\n...[truncated]`
+        : rawContent;
+
+    const ingestMetadata = {
+      type: "conversation" as const,
+      conversationId,
+      messageCount: messages.length,
+      originalContainerTags: uniqueTags,
+      ...metadata,
+    };
+
+    const savedIds: string[] = [];
+    let firstError: string | null = null;
+
+    for (const tag of uniqueTags) {
+      const result = await this.addMemory(content, tag, ingestMetadata);
+      if (result.success) {
+        savedIds.push(result.id);
+      } else if (!firstError) {
+        firstError = result.error || "Failed to store conversation";
+      }
+    }
+
+    if (savedIds.length === 0) {
+      log("ingestConversation: error", { conversationId, error: firstError });
+      return {
+        success: false as const,
+        error: firstError || "Failed to ingest conversation",
+      };
+    }
+
+    const status =
+      savedIds.length === uniqueTags.length ? "stored" : "partial";
+    const response: ConversationIngestResponse = {
+      id: savedIds[0]!,
+      conversationId,
+      status,
+    };
+
+    log("ingestConversation: success", {
+      conversationId,
+      status,
+      storedCount: savedIds.length,
+      requestedCount: uniqueTags.length,
+    });
+
+    return {
+      success: true as const,
+      ...response,
+      storedMemoryIds: savedIds,
+    };
   }
+
 }
 
 export const supermemoryClient = new SupermemoryClient();
