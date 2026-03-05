@@ -12,13 +12,14 @@ Your agent remembers what you tell it - across sessions, across projects.
 bunx opencode-supermemory@latest install
 ```
 
-Then get your API key from [console.supermemory.ai](https://console.supermemory.ai) and set it:
+Then get your API key from [app.supermemory.ai](https://app.supermemory.ai/?view=integrations) and set it:
 
 ```bash
 export SUPERMEMORY_API_KEY="sm_..."
 ```
 
 **Or let your agent do it** - paste this into OpenCode:
+
 ```
 Install opencode-supermemory by following https://raw.githubusercontent.com/supermemoryai/opencode-supermemory/main/README.md
 ```
@@ -37,6 +38,7 @@ bunx opencode-supermemory@latest install --no-tui
 ```
 
 This will:
+
 - Register the plugin in `~/.config/opencode/opencode.jsonc`
 - Create the `/supermemory-init` command
 
@@ -47,6 +49,7 @@ cat ~/.config/opencode/opencode.jsonc
 ```
 
 Should contain:
+
 ```json
 {
   "plugin": ["opencode-supermemory"]
@@ -56,16 +59,18 @@ Should contain:
 If not, add it manually:
 
 **JSONC:**
+
 ```jsonc
 {
   "plugin": [
-    "opencode-supermemory"
+    "opencode-supermemory",
     // ... other plugins
-  ]
+  ],
 }
 ```
 
 **JSON:**
+
 ```json
 {
   "plugin": ["opencode-supermemory"]
@@ -74,7 +79,7 @@ If not, add it manually:
 
 #### Step 3: Configure API key
 
-Ask the user to get their API key from [console.supermemory.ai](https://console.supermemory.ai).
+Ask the user to get their API key from [app.supermemory.ai](https://app.supermemory.ai/?view=integrations).
 
 Then set it via environment variable:
 
@@ -86,7 +91,7 @@ Or create `~/.config/opencode/supermemory.jsonc`:
 
 ```jsonc
 {
-  "apiKey": "sm_..."
+  "apiKey": "sm_...",
 }
 ```
 
@@ -99,6 +104,7 @@ opencode -c
 ```
 
 They should see `supermemory` in the tools list. If not, check:
+
 1. Is `SUPERMEMORY_API_KEY` set?
 2. Is the plugin in `opencode.jsonc`?
 3. Check logs: `tail ~/.opencode-supermemory.log`
@@ -114,11 +120,13 @@ Run `/supermemory-init` to have the agent explore and memorize the codebase.
 ### Context Injection
 
 On first message, the agent receives (invisible to user):
+
 - User profile (cross-project preferences)
 - Project memories (all project knowledge)
 - Relevant user memories (semantic search)
 
 Example of what the agent sees:
+
 ```
 [SUPERMEMORY]
 
@@ -154,6 +162,7 @@ Run `/supermemory-init` to explore and memorize your codebase structure, pattern
 ### Preemptive Compaction
 
 When context hits 80% capacity:
+
 1. Triggers OpenCode's summarization
 2. Injects project memories into summary context
 3. Saves session summary as a memory
@@ -172,13 +181,13 @@ Content in `<private>` tags is never stored.
 
 The `supermemory` tool is available to the agent:
 
-| Mode | Args | Description |
-|------|------|-------------|
-| `add` | `content`, `type?`, `scope?` | Store memory |
-| `search` | `query`, `scope?` | Search memories |
-| `profile` | `query?` | View user profile |
-| `list` | `scope?`, `limit?` | List memories |
-| `forget` | `memoryId`, `scope?` | Delete memory |
+| Mode      | Args                         | Description       |
+| --------- | ---------------------------- | ----------------- |
+| `add`     | `content`, `type?`, `scope?` | Store memory      |
+| `search`  | `query`, `scope?`            | Search memories   |
+| `profile` | `query?`                     | View user profile |
+| `list`    | `scope?`, `limit?`           | List memories     |
+| `forget`  | `memoryId`, `scope?`         | Delete memory     |
 
 **Scopes:** `user` (cross-project), `project` (default)
 
@@ -186,9 +195,9 @@ The `supermemory` tool is available to the agent:
 
 ## Memory Scoping
 
-| Scope | Tag | Persists |
-|-------|-----|----------|
-| User | `opencode_user_{sha256(git email)}` | All projects |
+| Scope   | Tag                                    | Persists     |
+| ------- | -------------------------------------- | ------------ |
+| User    | `opencode_user_{sha256(git email)}`    | All projects |
 | Project | `opencode_project_{sha256(directory)}` | This project |
 
 ## Configuration
@@ -228,7 +237,7 @@ Create `~/.config/opencode/supermemory.jsonc`:
   "keywordPatterns": ["log\\s+this", "write\\s+down"],
 
   // Context usage ratio that triggers compaction (0-1)
-  "compactionThreshold": 0.80
+  "compactionThreshold": 0.8,
 }
 ```
 
@@ -237,6 +246,7 @@ All fields optional. Env var `SUPERMEMORY_API_KEY` takes precedence over config 
 ### Container Tag Selection
 
 By default, container tags are auto-generated using `containerTagPrefix` plus a hash:
+
 - User tag: `{prefix}_user_{hash(git_email)}`
 - Project tag: `{prefix}_project_{hash(directory)}`
 
@@ -248,11 +258,12 @@ You can override this by specifying exact container tags:
   "userContainerTag": "my-team-workspace",
 
   // Use a specific container tag for project memories
-  "projectContainerTag": "my-awesome-project"
+  "projectContainerTag": "my-awesome-project",
 }
 ```
 
 This is useful when you want to:
+
 - Share memories across team members (same `userContainerTag`)
 - Sync memories between different machines for the same project
 - Organize memories using your own naming scheme
@@ -282,7 +293,7 @@ Local install:
 
 ```jsonc
 {
-  "plugin": ["file:///path/to/opencode-supermemory"]
+  "plugin": ["file:///path/to/opencode-supermemory"],
 }
 ```
 

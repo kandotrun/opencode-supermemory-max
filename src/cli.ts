@@ -182,10 +182,24 @@ This will:
 
 Wait for the command to complete, then inform the user whether authentication succeeded or failed.
 
-If the user wants to log out instead, run:
+If the user wants to log out instead, tell them to use the /supermemory-logout command.
+`;
+
+const SUPERMEMORY_LOGOUT_COMMAND = `---
+description: Log out from Supermemory and clear credentials
+---
+
+# Supermemory Logout
+
+Run this command to log out and clear Supermemory credentials:
+
 \`\`\`bash
 bunx opencode-supermemory@latest logout
 \`\`\`
+
+This will remove the saved credentials from ~/.supermemory-opencode/credentials.json.
+
+Inform the user whether logout succeeded and that they'll need to run /supermemory-login to re-authenticate.
 `;
 
 function createReadline(): readline.Interface {
@@ -298,6 +312,10 @@ function createCommands(): boolean {
   writeFileSync(loginPath, SUPERMEMORY_LOGIN_COMMAND);
   console.log(`✓ Created /supermemory-login command`);
 
+  const logoutPath = join(OPENCODE_COMMAND_DIR, "supermemory-logout.md");
+  writeFileSync(logoutPath, SUPERMEMORY_LOGOUT_COMMAND);
+  console.log(`✓ Created /supermemory-logout command`);
+
   return true;
 }
 
@@ -389,7 +407,7 @@ async function install(options: InstallOptions): Promise<number> {
   }
 
   // Step 2: Create commands
-  console.log("\nStep 2: Create /supermemory-init and /supermemory-login commands");
+  console.log("\nStep 2: Create /supermemory-init, /supermemory-login, and /supermemory-logout commands");
   if (options.tui) {
     const shouldCreate = await confirm(rl!, "Add supermemory commands?");
     if (!shouldCreate) {

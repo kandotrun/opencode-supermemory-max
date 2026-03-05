@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 const CREDENTIALS_DIR = join(homedir(), ".supermemory-opencode");
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, "credentials.json");
 const AUTH_PORT = 19877;
-const AUTH_BASE_URL = "https://console.supermemory.ai/auth/connect";
+const AUTH_BASE_URL = process.env.SUPERMEMORY_AUTH_URL || "https://app.supermemory.ai/auth/connect";
 const CLIENT_NAME = "opencode";
 
 interface Credentials {
