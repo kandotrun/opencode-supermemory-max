@@ -2,12 +2,13 @@ import type { Plugin, PluginInput } from "@opencode-ai/plugin";
 import type { Part } from "@opencode-ai/sdk";
 import { tool } from "@opencode-ai/plugin";
 
-import { supermemoryClient } from "./services/client.js";
+import { supermemoryClient, PERSONAL_ENTITY_CONTEXT } from "./services/client.js";
 import { formatContextForPrompt } from "./services/context.js";
 import { getTags } from "./services/tags.js";
 import { stripPrivateContent, isFullyPrivate } from "./services/privacy.js";
 import { createCompactionHook, type CompactionContext } from "./services/compaction.js";
 import { generatePartId } from "./services/ids.js";
+import { applySignalExtraction } from "./services/signal.js";
 
 import { isConfigured, CONFIG } from "./config.js";
 import { log } from "./services/logger.js";
@@ -108,9 +109,30 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
       return;
     }
 
+    // Apply signal extraction if enabled
+    let messagesToSave = messages;
+    if (CONFIG.signalExtraction) {
+      const filtered = applySignalExtraction(
+        messages,
+        CONFIG.signalKeywords,
+        CONFIG.signalTurnsBefore
+      );
+      if (!filtered) {
+        log("session-save: no signals found, skipping", { sessionID });
+        sessionMessages.delete(sessionID);
+        return;
+      }
+      messagesToSave = filtered;
+      log("session-save: signal extraction applied", {
+        sessionID,
+        originalCount: messages.length,
+        filteredCount: filtered.length,
+      });
+    }
+
     // Build a condensed transcript (limit size)
     const MAX_CHARS = 50_000;
-    let transcript = messages.join("\n---\n");
+    let transcript = messagesToSave.join("\n---\n");
     if (transcript.length > MAX_CHARS) {
       transcript = transcript.slice(0, MAX_CHARS) + "\n...[truncated]";
     }
@@ -118,13 +140,22 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
     const content = `[Session Conversation - ${new Date().toISOString()}]\n${transcript}`;
 
     try {
-      const result = await supermemoryClient.ingestConversation(
-        sessionID,
-        [{ role: "user", content }],
-        [tags.project, tags.user],
-        { type: "conversation", source: "session-end" }
+      // Save to project, user, and repo scopes with entity context
+      const containerTags = [tags.project, tags.user, tags.repo];
+      const result = await supermemoryClient.addMemory(
+        content,
+        tags.project,
+        { type: "conversation", source: "session-end" },
+        { entityContext: PERSONAL_ENTITY_CONTEXT }
       );
-      log("session-save: saved", { sessionID, success: result.success });
+
+      // Also save to user and repo scopes
+      await Promise.allSettled([
+        supermemoryClient.addMemory(content, tags.user, { type: "conversation" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+        supermemoryClient.addMemory(content, tags.repo, { type: "conversation" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+      ]);
+
+      log("session-save: saved", { sessionID, success: result.success, scopes: containerTags });
     } catch (err) {
       log("session-save: error", { sessionID, error: String(err) });
     }
@@ -192,15 +223,17 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
             messageCount: count,
           });
 
-          const [profileResult, userMemoriesResult, projectMemoriesListResult] = await Promise.all([
+          const [profileResult, userMemoriesResult, projectMemoriesListResult, repoMemoriesResult] = await Promise.all([
             supermemoryClient.getProfile(tags.user, userMessage),
             supermemoryClient.searchMemories(userMessage, tags.user),
             supermemoryClient.listMemories(tags.project, CONFIG.maxProjectMemories),
+            supermemoryClient.searchMemories(userMessage, tags.repo),
           ]);
 
           const profile = profileResult.success ? profileResult : null;
           const userMemories = userMemoriesResult.success ? userMemoriesResult : { results: [] };
           const projectMemoriesList = projectMemoriesListResult.success ? projectMemoriesListResult : { memories: [] };
+          const repoMemories = repoMemoriesResult.success ? repoMemoriesResult : { results: [] };
 
           const projectMemories = {
             results: (projectMemoriesList.memories || []).map((m: any) => ({
@@ -217,7 +250,8 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           const memoryContext = formatContextForPrompt(
             profile,
             userMemories,
-            projectMemories
+            projectMemories,
+            repoMemories
           );
 
           if (memoryContext) {
@@ -266,7 +300,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
               "conversation",
             ])
             .optional(),
-          scope: tool.schema.enum(["user", "project"]).optional(),
+          scope: tool.schema.enum(["user", "project", "repo"]).optional(),
           memoryId: tool.schema.string().optional(),
           limit: tool.schema.number().optional(),
         },
@@ -275,7 +309,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           content?: string;
           query?: string;
           type?: MemoryType;
-          scope?: MemoryScope;
+          scope?: MemoryScope | "repo";
           memoryId?: string;
           limit?: number;
         }) {
@@ -355,7 +389,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
 
                 const scope = args.scope || "project";
                 const containerTag =
-                  scope === "user" ? tags.user : tags.project;
+                  scope === "user" ? tags.user : scope === "repo" ? tags.repo : tags.project;
 
                 const result = await supermemoryClient.addMemory(
                   sanitizedContent,
@@ -390,54 +424,37 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const scope = args.scope;
 
                 if (scope === "user") {
-                  const result = await supermemoryClient.searchMemories(
-                    args.query,
-                    tags.user
-                  );
-                  if (!result.success) {
-                    return JSON.stringify({
-                      success: false,
-                      error: result.error || "Failed to search memories",
-                    });
-                  }
+                  const result = await supermemoryClient.searchMemories(args.query, tags.user);
+                  if (!result.success) return JSON.stringify({ success: false, error: result.error || "Failed to search memories" });
                   return formatSearchResults(args.query, scope, result, args.limit);
                 }
 
                 if (scope === "project") {
-                  const result = await supermemoryClient.searchMemories(
-                    args.query,
-                    tags.project
-                  );
-                  if (!result.success) {
-                    return JSON.stringify({
-                      success: false,
-                      error: result.error || "Failed to search memories",
-                    });
-                  }
+                  const result = await supermemoryClient.searchMemories(args.query, tags.project);
+                  if (!result.success) return JSON.stringify({ success: false, error: result.error || "Failed to search memories" });
                   return formatSearchResults(args.query, scope, result, args.limit);
                 }
 
-                const [userResult, projectResult] = await Promise.all([
+                if (scope === "repo") {
+                  const result = await supermemoryClient.searchMemories(args.query, tags.repo);
+                  if (!result.success) return JSON.stringify({ success: false, error: result.error || "Failed to search memories" });
+                  return formatSearchResults(args.query, scope, result, args.limit);
+                }
+
+                const [userResult, projectResult, repoResult] = await Promise.all([
                   supermemoryClient.searchMemories(args.query, tags.user),
                   supermemoryClient.searchMemories(args.query, tags.project),
+                  supermemoryClient.searchMemories(args.query, tags.repo),
                 ]);
 
                 if (!userResult.success || !projectResult.success) {
-                  return JSON.stringify({
-                    success: false,
-                    error: userResult.error || projectResult.error || "Failed to search memories",
-                  });
+                  return JSON.stringify({ success: false, error: userResult.error || projectResult.error || "Failed to search memories" });
                 }
 
                 const combined = [
-                  ...(userResult.results || []).map((r) => ({
-                    ...r,
-                    scope: "user" as const,
-                  })),
-                  ...(projectResult.results || []).map((r) => ({
-                    ...r,
-                    scope: "project" as const,
-                  })),
+                  ...(userResult.results || []).map((r) => ({ ...r, scope: "user" as const })),
+                  ...(projectResult.results || []).map((r) => ({ ...r, scope: "project" as const })),
+                  ...((repoResult.success ? repoResult.results : []) || []).map((r) => ({ ...r, scope: "repo" as const })),
                 ].sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0));
 
                 return JSON.stringify({
@@ -479,7 +496,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 const scope = args.scope || "project";
                 const limit = args.limit || 20;
                 const containerTag =
-                  scope === "user" ? tags.user : tags.project;
+                  scope === "user" ? tags.user : scope === "repo" ? tags.repo : tags.project;
 
                 const result = await supermemoryClient.listMemories(
                   containerTag,
