@@ -27,6 +27,10 @@ interface SupermemoryConfig {
   compactionThreshold?: number;
   reinjectEveryN?: number;
   recallKeywordPatterns?: string[];
+  /** Capture every user+assistant exchange incrementally (crash-safe). Default: true */
+  incrementalCapture?: boolean;
+  /** Max characters per incremental capture payload */
+  maxCaptureChars?: number;
   /** Enable signal extraction for session saves. Only saves turns with signal keywords. */
   signalExtraction?: boolean;
   /** Keywords that mark important turns for signal extraction */
@@ -74,8 +78,10 @@ const DEFAULTS = {
   filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [] as string[],
   compactionThreshold: 0.80,
-  reinjectEveryN: 0,
+  reinjectEveryN: 1, // Default: inject context on every message (like OpenClaw version)
   recallKeywordPatterns: [] as string[],
+  incrementalCapture: true,
+  maxCaptureChars: 5000,
   signalExtraction: false,
   signalKeywords: [] as string[],
   signalTurnsBefore: 3,
@@ -136,6 +142,8 @@ export const CONFIG = {
     ...DEFAULT_RECALL_KEYWORD_PATTERNS,
     ...(fileConfig.recallKeywordPatterns ?? []).filter(isValidRegex),
   ],
+  incrementalCapture: fileConfig.incrementalCapture ?? DEFAULTS.incrementalCapture,
+  maxCaptureChars: fileConfig.maxCaptureChars ?? DEFAULTS.maxCaptureChars,
   signalExtraction: fileConfig.signalExtraction ?? DEFAULTS.signalExtraction,
   signalKeywords: [
     ...DEFAULT_SIGNAL_KEYWORDS,

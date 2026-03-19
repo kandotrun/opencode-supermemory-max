@@ -34,6 +34,17 @@ function removeCodeBlocks(text: string): string {
   return text.replace(CODE_BLOCK_PATTERN, "").replace(INLINE_CODE_PATTERN, "");
 }
 
+/** Strip supermemory context blocks and metadata from text for cleaner queries */
+function stripMetadataForQuery(text: string): string {
+  return text
+    .replace(/<supermemory-context>[\s\S]*?<\/supermemory-context>/g, "")
+    .replace(/\[SUPERMEMORY\][\s\S]*?(?=\n\n|\z)/g, "")
+    .replace(/```json\s*\{[\s\S]*?\}\s*```/g, "")
+    .replace(/Conversation info \(untrusted metadata\):[\s\S]*?```/g, "")
+    .replace(/Sender \(untrusted metadata\):[\s\S]*?```/g, "")
+    .trim();
+}
+
 function detectMemoryKeyword(text: string): boolean {
   const textWithoutCode = removeCodeBlocks(text);
   return MEMORY_KEYWORD_PATTERN.test(textWithoutCode);
@@ -223,11 +234,14 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
             messageCount: count,
           });
 
+          // Strip metadata noise from query for cleaner recall
+          const cleanQuery = stripMetadataForQuery(userMessage).slice(0, 300);
+
           const [profileResult, userMemoriesResult, projectMemoriesListResult, repoMemoriesResult] = await Promise.all([
-            supermemoryClient.getProfile(tags.user, userMessage),
-            supermemoryClient.searchMemories(userMessage, tags.user),
+            supermemoryClient.getProfile(tags.user, cleanQuery),
+            supermemoryClient.searchMemories(cleanQuery, tags.user),
             supermemoryClient.listMemories(tags.project, CONFIG.maxProjectMemories),
-            supermemoryClient.searchMemories(userMessage, tags.repo),
+            supermemoryClient.searchMemories(cleanQuery, tags.repo),
           ]);
 
           const profile = profileResult.success ? profileResult : null;
@@ -578,16 +592,54 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
         }
       }
 
-      // Track assistant messages for richer session summaries
+      // Track assistant messages + incremental capture
       if (input.event.type === "message.updated" && isConfigured()) {
         const props = input.event.properties as Record<string, unknown> | undefined;
         const info = props?.info as { role?: string; sessionID?: string; finish?: boolean } | undefined;
         if (info?.role === "assistant" && info?.finish && info?.sessionID) {
-          // Try to get assistant text from parts
           const parts = props?.parts as Array<{ type: string; text?: string }> | undefined;
           if (parts) {
-            const text = parts.filter(p => p.type === "text" && p.text).map(p => p.text!).join("\n");
-            if (text) collectMessage(info.sessionID, `[assistant] ${text}`);
+            const assistantText = parts.filter(p => p.type === "text" && p.text).map(p => p.text!).join("\n");
+            if (assistantText) {
+              collectMessage(info.sessionID, `[assistant] ${assistantText}`);
+
+              // Incremental capture: save each exchange immediately (crash-safe)
+              if (CONFIG.incrementalCapture) {
+                const recentMessages = sessionMessages.get(info.sessionID);
+                if (recentMessages && recentMessages.length >= 2) {
+                  // Get last user + assistant pair
+                  const lastMessages = recentMessages.slice(-2);
+                  const userMsg = lastMessages.find(m => !m.startsWith("[assistant]"));
+                  const asstMsg = lastMessages.find(m => m.startsWith("[assistant]"));
+
+                  if (userMsg && asstMsg) {
+                    // Clean metadata from user message
+                    const cleanUser = stripMetadataForQuery(userMsg);
+                    if (cleanUser.length > 10) {
+                      let captureContent = `[ユーザー] ${cleanUser}\n\n${asstMsg}`;
+                      if (captureContent.length > CONFIG.maxCaptureChars) {
+                        captureContent = captureContent.slice(0, CONFIG.maxCaptureChars) + "\n...(truncated)";
+                      }
+
+                      // Fire and forget — don't block the event loop
+                      supermemoryClient.addMemory(
+                        captureContent,
+                        tags.project,
+                        { type: "conversation", source: "incremental" },
+                        { entityContext: PERSONAL_ENTITY_CONTEXT }
+                      ).then(() => {
+                        log("incremental-capture: saved exchange", {
+                          sessionID: info.sessionID,
+                          chars: captureContent.length,
+                        });
+                      }).catch((err) => {
+                        log("incremental-capture: error", { error: String(err) });
+                      });
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
