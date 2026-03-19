@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { supermemoryClient } from "./client.js";
+import { supermemoryClient, PERSONAL_ENTITY_CONTEXT } from "./client.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
 import { generatePartId, generateMessageId } from "./ids.js";
+import { formatContextForPrompt } from "./context.js";
 
 const MESSAGE_STORAGE = join(homedir(), ".opencode", "messages");
 const PART_STORAGE = join(homedir(), ".opencode", "parts");
@@ -237,7 +238,7 @@ export interface CompactionContext {
 
 export function createCompactionHook(
   ctx: CompactionContext,
-  tags: { user: string; project: string },
+  tags: { user: string; project: string; repo: string },
   options?: CompactionOptions
 ) {
   const state: CompactionState = {
@@ -290,8 +291,15 @@ export function createCompactionHook(
       const result = await supermemoryClient.addMemory(
         `[Session Summary]\n${summaryContent}`,
         tags.project,
-        { type: "conversation" }
+        { type: "conversation", source: "compaction-summary" },
+        { entityContext: PERSONAL_ENTITY_CONTEXT }
       );
+
+      // Also save to user and repo scopes
+      await Promise.allSettled([
+        supermemoryClient.addMemory(`[Session Summary]\n${summaryContent}`, tags.user, { type: "conversation" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+        supermemoryClient.addMemory(`[Session Summary]\n${summaryContent}`, tags.repo, { type: "conversation" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+      ]);
 
       if (result.success) {
         log("[compaction] summary saved as memory", { sessionID, memoryId: result.id });
@@ -366,6 +374,43 @@ export function createCompactionHook(
     log("[compaction] triggering compaction", { sessionID, usageRatio });
 
     try {
+      // === Pre-compaction save: capture full conversation to supermemory ===
+      try {
+        const msgResp = await ctx.client.session.messages({
+          path: { id: sessionID },
+          query: { directory: ctx.directory },
+        });
+        const allMessages = (msgResp.data ?? msgResp) as Array<{ info: MessageInfo; parts?: Array<{ type: string; text?: string }> }>;
+
+        const conversationParts: string[] = [];
+        for (const msg of allMessages) {
+          if (msg.info.summary) continue; // skip old summaries
+          const textParts = msg.parts?.filter(p => p.type === "text" && p.text) || [];
+          const text = textParts.map(p => p.text).join("\n");
+          if (text.length < 3) continue;
+          const role = msg.info.role === "assistant" ? "[アシスタント]" : "[ユーザー]";
+          conversationParts.push(`${role} ${text}`);
+        }
+
+        if (conversationParts.length > 0) {
+          let content = `[コンパクション前の保存]\n${conversationParts.join("\n\n")}`;
+          const maxChars = CONFIG.maxCaptureChars * 2; // Allow more for compaction
+          if (content.length > maxChars) {
+            content = content.slice(0, maxChars) + "\n...(truncated)";
+          }
+
+          await Promise.allSettled([
+            supermemoryClient.addMemory(content, tags.project, { type: "conversation", source: "pre-compaction" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+            supermemoryClient.addMemory(content, tags.user, { type: "conversation", source: "pre-compaction" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+            supermemoryClient.addMemory(content, tags.repo, { type: "conversation", source: "pre-compaction" }, { entityContext: PERSONAL_ENTITY_CONTEXT }),
+          ]);
+
+          log("[compaction] pre-compaction save done", { sessionID, chars: content.length, messages: conversationParts.length });
+        }
+      } catch (err) {
+        log("[compaction] pre-compaction save failed (non-fatal)", { error: String(err) });
+      }
+
       await injectCompactionContext({
         sessionID,
         providerID,
@@ -399,11 +444,32 @@ export function createCompactionHook(
           const messageDir = getMessageDir(sessionID);
           const storedMessage = messageDir ? findNearestMessageWithFields(messageDir) : null;
 
+          // Re-inject supermemory context after compaction so agent has memories
+          let continueText = "Continue";
+          try {
+            const [profileResult, userMemoriesResult, repoMemoriesResult] = await Promise.all([
+              supermemoryClient.getProfile(tags.user),
+              supermemoryClient.searchMemories("recent work context", tags.user),
+              supermemoryClient.searchMemories("recent work context", tags.repo),
+            ]);
+            const profile = profileResult.success ? profileResult : null;
+            const userMemories = userMemoriesResult.success ? userMemoriesResult : { results: [] };
+            const repoMemories = repoMemoriesResult.success ? repoMemoriesResult : { results: [] };
+
+            const memoryContext = formatContextForPrompt(profile, userMemories, { results: [] }, repoMemories);
+            if (memoryContext) {
+              continueText = `${memoryContext}\n\nContinue where you left off. The session was compacted — use the memory context above to maintain continuity.`;
+              log("[compaction] post-compaction memory context injected", { sessionID, chars: memoryContext.length });
+            }
+          } catch (err) {
+            log("[compaction] post-compaction recall failed (non-fatal)", { error: String(err) });
+          }
+
           await ctx.client.session.promptAsync({
             path: { id: sessionID },
             body: {
               agent: storedMessage?.agent,
-              parts: [{ type: "text", text: "Continue" }],
+              parts: [{ type: "text", text: continueText }],
             },
             query: { directory: ctx.directory },
           });
