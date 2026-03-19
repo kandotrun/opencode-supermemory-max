@@ -10,6 +10,43 @@ import type {
 const TIMEOUT_MS = 30000;
 const MAX_CONVERSATION_CHARS = 100_000;
 
+export const PERSONAL_ENTITY_CONTEXT = `Developer coding session transcript. Focus on USER message and intent.
+
+RULES:
+- Extract USER's action/intent, not every detail assistant provides matter
+- Condense assistant responses into what user gained from it
+- Skip granular facts from assistant output
+
+EXTRACT:
+- Research: "researched whisper.cpp for speech recognition"
+- Actions: "built auth flow with JWT", "fixed memory leak in useEffect"
+- Preferences: "prefers Tailwind over CSS modules"
+- Decisions: "chose SQLite for local storage"
+- Learnings: "learned about React Server Components"
+
+SKIP:
+- Every fact assistant mentions (condense to user's action)
+- Generic assistant explanations user didn't confirm/use`;
+
+export const REPO_ENTITY_CONTEXT = `Project/codebase knowledge for team sharing.
+
+EXTRACT:
+- Architecture: "uses monorepo with turborepo", "API in /apps/api"
+- Conventions: "components in PascalCase", "hooks prefixed with use"
+- Patterns: "all API routes use withAuth wrapper", "errors thrown as ApiError"
+- Setup: "requires .env with DATABASE_URL", "run pnpm db:migrate first"
+- Decisions: "chose Drizzle over Prisma for performance", "using RSC for data fetching"`;
+
+function dedupe<T>(items: T[], getKey: (item: T) => string = (x) => String(x)): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = getKey(item).toLowerCase().trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
@@ -74,8 +111,9 @@ export class SupermemoryClient {
         }),
         TIMEOUT_MS
       );
-      log("searchMemories: success", { count: result.results?.length || 0 });
-      return { success: true as const, ...result };
+      const deduped = dedupe(result.results || [], (r: any) => r.memory || r.chunk || "");
+      log("searchMemories: success", { count: deduped.length });
+      return { success: true as const, ...result, results: deduped };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log("searchMemories: error", { error: errorMessage });
@@ -93,6 +131,11 @@ export class SupermemoryClient {
         }),
         TIMEOUT_MS
       );
+      // Dedupe profile facts
+      if (result?.profile) {
+        result.profile.static = dedupe(result.profile.static || [], (f: any) => typeof f === "string" ? f : f?.content || JSON.stringify(f));
+        result.profile.dynamic = dedupe(result.profile.dynamic || [], (f: any) => typeof f === "string" ? f : f?.content || JSON.stringify(f));
+      }
       log("getProfile: success", { hasProfile: !!result?.profile });
       return { success: true as const, ...result };
     } catch (error) {
@@ -105,16 +148,21 @@ export class SupermemoryClient {
   async addMemory(
     content: string,
     containerTag: string,
-    metadata?: { type?: MemoryType; tool?: string; [key: string]: unknown }
+    metadata?: { type?: MemoryType; tool?: string; [key: string]: unknown },
+    options?: { entityContext?: string }
   ) {
     log("addMemory: start", { containerTag, contentLength: content.length });
     try {
+      const payload: Record<string, unknown> = {
+        content,
+        containerTag,
+        metadata: { sm_source: "opencode-supermemory-max", ...metadata } as Record<string, string | number | boolean | string[]>,
+      };
+      if (options?.entityContext) {
+        payload.entityContext = options.entityContext;
+      }
       const result = await withTimeout(
-        this.getClient().memories.add({
-          content,
-          containerTag,
-          metadata: metadata as Record<string, string | number | boolean | string[]>,
-        }),
+        this.getClient().memories.add(payload as any),
         TIMEOUT_MS
       );
       log("addMemory: success", { id: result.id });
