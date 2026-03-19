@@ -81,6 +81,51 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
       })
     : null;
 
+  // Track messages per session for auto-save on session end
+  const sessionMessages = new Map<string, string[]>();
+
+  const collectMessage = (sessionID: string, text: string) => {
+    if (!text.trim()) return;
+    const messages = sessionMessages.get(sessionID) || [];
+    // Keep last N messages to avoid unbounded growth
+    const MAX_TRACKED = 50;
+    if (messages.length >= MAX_TRACKED) messages.shift();
+    messages.push(text);
+    sessionMessages.set(sessionID, messages);
+  };
+
+  const saveSessionSummary = async (sessionID: string) => {
+    const messages = sessionMessages.get(sessionID);
+    if (!messages || messages.length < 3) {
+      log("session-save: too few messages, skipping", { sessionID, count: messages?.length || 0 });
+      sessionMessages.delete(sessionID);
+      return;
+    }
+
+    // Build a condensed transcript (limit size)
+    const MAX_CHARS = 50_000;
+    let transcript = messages.join("\n---\n");
+    if (transcript.length > MAX_CHARS) {
+      transcript = transcript.slice(0, MAX_CHARS) + "\n...[truncated]";
+    }
+
+    const content = `[Session Conversation - ${new Date().toISOString()}]\n${transcript}`;
+
+    try {
+      const result = await supermemoryClient.ingestConversation(
+        sessionID,
+        [{ role: "user", content }],
+        [tags.project, tags.user],
+        { type: "conversation", source: "session-end" }
+      );
+      log("session-save: saved", { sessionID, success: result.success });
+    } catch (err) {
+      log("session-save: error", { sessionID, error: String(err) });
+    }
+
+    sessionMessages.delete(sessionID);
+  };
+
   return {
     "chat.message": async (input, output) => {
       if (!isConfigured()) return;
@@ -109,6 +154,9 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           partsCount: output.parts.length,
           textPartsCount: textParts.length,
         });
+
+        // Track message for session-end auto-save
+        collectMessage(input.sessionID, userMessage);
 
         if (detectMemoryKeyword(userMessage)) {
           log("chat.message: memory keyword detected");
@@ -486,6 +534,29 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
     },
 
     event: async (input: { event: { type: string; properties?: unknown } }) => {
+      // Auto-save session conversations on session end
+      if (input.event.type === "session.deleted" && isConfigured()) {
+        const props = input.event.properties as Record<string, unknown> | undefined;
+        const sessionInfo = props?.info as { id?: string } | undefined;
+        if (sessionInfo?.id) {
+          await saveSessionSummary(sessionInfo.id);
+        }
+      }
+
+      // Track assistant messages for richer session summaries
+      if (input.event.type === "message.updated" && isConfigured()) {
+        const props = input.event.properties as Record<string, unknown> | undefined;
+        const info = props?.info as { role?: string; sessionID?: string; finish?: boolean } | undefined;
+        if (info?.role === "assistant" && info?.finish && info?.sessionID) {
+          // Try to get assistant text from parts
+          const parts = props?.parts as Array<{ type: string; text?: string }> | undefined;
+          if (parts) {
+            const text = parts.filter(p => p.type === "text" && p.text).map(p => p.text!).join("\n");
+            if (text) collectMessage(info.sessionID, `[assistant] ${text}`);
+          }
+        }
+      }
+
       if (compactionHook) {
         await compactionHook.event(input);
       }
