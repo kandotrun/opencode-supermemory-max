@@ -1,12 +1,12 @@
 {
-  "name": "opencode-supermemory",
-  "version": "2.0.1",
-  "description": "OpenCode plugin that gives coding agents persistent memory using Supermemory",
+  "name": "opencode-supermemory-max",
+  "version": "1.0.0",
+  "description": "Enhanced OpenCode memory plugin — Japanese support, incremental capture, signal extraction, 3-tier scopes, dedup, entity context. Fork of opencode-supermemory with aggressive memory maximization.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "opencode-supermemory": "./dist/cli.js"
+    "opencode-supermemory-max": "./dist/cli.js"
   },
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target node && bun build ./src/cli.ts --outfile ./dist/cli.js --target node && tsc --emitDeclarationOnly",
@@ -19,13 +19,16 @@
     "supermemory",
     "memory",
     "ai",
-    "coding-agent"
+    "coding-agent",
+    "japanese",
+    "incremental-capture",
+    "signal-extraction"
   ],
-  "author": "Supermemory",
+  "author": "Kan Ninomiya <ninomiya@kan.run>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/supermemoryai/opencode-supermemory"
+    "url": "https://github.com/kandotrun/opencode-supermemory-max"
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.0.162",
