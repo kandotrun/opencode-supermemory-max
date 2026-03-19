@@ -17,6 +17,7 @@ const CODE_BLOCK_PATTERN = /```[\s\S]*?```/g;
 const INLINE_CODE_PATTERN = /`[^`]+`/g;
 
 const MEMORY_KEYWORD_PATTERN = new RegExp(`\\b(${CONFIG.keywordPatterns.join("|")})\\b`, "i");
+const RECALL_KEYWORD_PATTERN = new RegExp(`\\b(${CONFIG.recallKeywordPatterns.join("|")})\\b`, "i");
 
 const MEMORY_NUDGE_MESSAGE = `[MEMORY TRIGGER DETECTED]
 The user wants you to remember something. You MUST use the \`supermemory\` tool with \`mode: "add"\` to save this information.
@@ -37,10 +38,15 @@ function detectMemoryKeyword(text: string): boolean {
   return MEMORY_KEYWORD_PATTERN.test(textWithoutCode);
 }
 
+function detectRecallKeyword(text: string): boolean {
+  const textWithoutCode = removeCodeBlocks(text);
+  return RECALL_KEYWORD_PATTERN.test(textWithoutCode);
+}
+
 export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
   const { directory } = ctx;
   const tags = getTags(directory);
-  const injectedSessions = new Set<string>();
+  const sessionMessageCount = new Map<string, number>();
   log("Plugin init", { directory, tags, configured: isConfigured() });
 
   if (!isConfigured()) {
@@ -171,10 +177,20 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
           output.parts.push(nudgePart);
         }
 
-        const isFirstMessage = !injectedSessions.has(input.sessionID);
+        // Determine whether to inject context
+        const count = (sessionMessageCount.get(input.sessionID) || 0) + 1;
+        sessionMessageCount.set(input.sessionID, count);
 
-        if (isFirstMessage) {
-          injectedSessions.add(input.sessionID);
+        const isFirstMessage = count === 1;
+        const recallTriggered = detectRecallKeyword(userMessage);
+        const periodicReinject = CONFIG.reinjectEveryN > 0 && count % CONFIG.reinjectEveryN === 0;
+        const shouldInjectContext = isFirstMessage || recallTriggered || periodicReinject;
+
+        if (shouldInjectContext) {
+          log("chat.message: injecting context", {
+            reason: isFirstMessage ? "first-message" : recallTriggered ? "recall-keyword" : "periodic",
+            messageCount: count,
+          });
 
           const [profileResult, userMemoriesResult, projectMemoriesListResult] = await Promise.all([
             supermemoryClient.getProfile(tags.user, userMessage),
@@ -220,6 +236,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
             log("chat.message: context injected", {
               duration,
               contextLength: memoryContext.length,
+              reason: isFirstMessage ? "first-message" : recallTriggered ? "recall-keyword" : "periodic",
             });
           }
         }
@@ -540,6 +557,7 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
         const sessionInfo = props?.info as { id?: string } | undefined;
         if (sessionInfo?.id) {
           await saveSessionSummary(sessionInfo.id);
+          sessionMessageCount.delete(sessionInfo.id);
         }
       }
 
