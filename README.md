@@ -1,87 +1,54 @@
-# opencode-supermemory
+# opencode-supermemory-max
 
-OpenCode plugin for persistent memory using [Supermemory](https://supermemory.ai).
+> 🧠 Enhanced fork of [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory) — maximizing memory quality and coverage for [OpenCode](https://opencode.ai) coding agents.
 
-Your agent remembers what you tell it - across sessions, across projects.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+## Why "max"?
+
+The official `opencode-supermemory` plugin is maintained by the Supermemory team, but tends to be conservative with API calls and slow to merge fixes. **opencode-supermemory-max** takes the opposite approach:
+
+- **Aggressive memory utilization** — save more, recall more, lose nothing
+- **Bug fixes shipped fast** — no 2-week PR review waits
+- **Feature parity with claude-supermemory** — all the good stuff from the Claude Code plugin, ported to OpenCode
+- **Japanese language support** — keyword detection and signal extraction work in both English and Japanese
+- **Upstream tracking** — good changes from upstream get merged in
+
+## What's different from upstream?
+
+| Feature | upstream | max |
+|---------|----------|-----|
+| Part ID fix (OpenCode v1.2.25+) | ❌ Broken | ✅ Fixed |
+| Japanese keywords (覚えて, メモして, etc.) | ❌ | ✅ 11 patterns |
+| Session-end auto-save | ❌ | ✅ Saves to all scopes |
+| Context re-injection | First message only | ✅ Periodic + keyword trigger |
+| Entity Context (extraction guidance) | ❌ | ✅ Personal + Repo contexts |
+| Dedup (no duplicate memories) | ❌ | ✅ Search + profile |
+| Relative time display | ❌ | ✅ "3hrs ago", "2d ago" |
+| Repo container tag (team sharing) | ❌ | ✅ 3-tier: user/project/repo |
+| Signal extraction (smart filtering) | ❌ | ✅ Keyword-based with context |
+| Recall keywords (思い出して, recall) | ❌ | ✅ Triggers context refresh |
 
 ## Installation
 
-### For Humans
+### Quick Start
 
 ```bash
-bunx opencode-supermemory@latest install
+# Clone and build
+git clone https://github.com/kandotrun/opencode-supermemory-max.git
+cd opencode-supermemory-max
+bun install && bun run build
 ```
 
-Then get your API key from [app.supermemory.ai](https://app.supermemory.ai/?view=integrations) and set it:
-
-```bash
-export SUPERMEMORY_API_KEY="sm_..."
-```
-
-**Or let your agent do it** - paste this into OpenCode:
-
-```
-Install opencode-supermemory by following https://raw.githubusercontent.com/supermemoryai/opencode-supermemory/main/README.md
-```
-
-### For LLM Agents
-
-<details>
-<summary>Instructions for LLM Agents (click to expand)</summary>
-
-If you're an LLM agent helping set up opencode-supermemory, follow these steps:
-
-#### Step 1: Run the installer
-
-```bash
-bunx opencode-supermemory@latest install --no-tui
-```
-
-This will:
-
-- Register the plugin in `~/.config/opencode/opencode.jsonc`
-- Create the `/supermemory-init` command
-
-#### Step 2: Verify the config
-
-```bash
-cat ~/.config/opencode/opencode.jsonc
-```
-
-Should contain:
+Add to your OpenCode config (`~/.config/opencode/opencode.json`):
 
 ```json
 {
-  "plugin": ["opencode-supermemory"]
+  "plugin": ["~/opencode-supermemory-max"]
 }
 ```
 
-If not, add it manually:
-
-**JSONC:**
-
-```jsonc
-{
-  "plugin": [
-    "opencode-supermemory",
-    // ... other plugins
-  ],
-}
-```
-
-**JSON:**
-
-```json
-{
-  "plugin": ["opencode-supermemory"]
-}
-```
-
-#### Step 3: Configure API key
-
-Ask the user to get their API key from [app.supermemory.ai](https://app.supermemory.ai/?view=integrations).
-
-Then set it via environment variable:
+Set your API key:
 
 ```bash
 export SUPERMEMORY_API_KEY="sm_..."
@@ -91,41 +58,17 @@ Or create `~/.config/opencode/supermemory.jsonc`:
 
 ```jsonc
 {
-  "apiKey": "sm_...",
+  "apiKey": "sm_..."
 }
 ```
 
-#### Step 4: Verify setup
-
-Tell the user to restart OpenCode and run:
-
-```bash
-opencode -c
-```
-
-They should see `supermemory` in the tools list. If not, check:
-
-1. Is `SUPERMEMORY_API_KEY` set?
-2. Is the plugin in `opencode.jsonc`?
-3. Check logs: `tail ~/.opencode-supermemory.log`
-
-#### Step 5: Initialize codebase memory (optional)
-
-Run `/supermemory-init` to have the agent explore and memorize the codebase.
-
-</details>
+Get your API key from [app.supermemory.ai](https://app.supermemory.ai/?view=integrations).
 
 ## Features
 
-### Context Injection
+### 🔄 Context Injection
 
-On first message, the agent receives (invisible to user):
-
-- User profile (cross-project preferences)
-- Project memories (all project knowledge)
-- Relevant user memories (semantic search)
-
-Example of what the agent sees:
+On first message (and periodically), the agent receives memory context:
 
 ```
 [SUPERMEMORY]
@@ -134,151 +77,117 @@ User Profile:
 - Prefers concise responses
 - Expert in TypeScript
 
+Repo Knowledge (Shared):
+- [2hrs ago] Uses monorepo with turborepo [85%]
+
 Project Knowledge:
-- [100%] Uses Bun, not Node.js
-- [100%] Build: bun run build
+- [just now] Build: bun run build [100%]
 
 Relevant Memories:
-- [82%] Build fails if .env.local missing
+- [3d ago] Build fails if .env.local missing [82%]
 ```
 
-The agent uses this context automatically - no manual prompting needed.
+### 🇯🇵 Japanese + English Keywords
 
-### Keyword Detection
+Memory triggers work in both languages:
 
-Say "remember", "save this", "don't forget" etc. and the agent auto-saves to memory.
+| English | Japanese |
+|---------|----------|
+| remember, save this | 覚えて, メモして, 保存して |
+| recall, check memory | 思い出して, メモリ確認 |
 
-```
-You: "Remember that this project uses bun"
-Agent: [saves to project memory]
-```
+### 📦 3-Tier Memory Scopes
 
-Add custom triggers via `keywordPatterns` config.
+| Scope | Purpose | Tag Format |
+|-------|---------|------------|
+| **User** | Cross-project preferences | `opencode_user_{hash}` |
+| **Project** | Directory-specific knowledge | `opencode_project_{hash}` |
+| **Repo** | Team-shared via git remote | `repo_{reponame}` |
 
-### Codebase Indexing
+### 🎯 Signal Extraction
 
-Run `/supermemory-init` to explore and memorize your codebase structure, patterns, and conventions.
+When enabled, only saves session turns containing important keywords — no noise:
 
-### Preemptive Compaction
-
-When context hits 80% capacity:
-
-1. Triggers OpenCode's summarization
-2. Injects project memories into summary context
-3. Saves session summary as a memory
-
-This preserves conversation context across compaction events.
-
-### Privacy
-
-```
-API key is <private>sk-abc123</private>
+```jsonc
+{
+  "signalExtraction": true,
+  "signalTurnsBefore": 3  // context turns before each signal
+}
 ```
 
-Content in `<private>` tags is never stored.
+Built-in signal keywords: `implementation`, `architecture`, `decision`, `bug`, `fix`, `実装`, `設計`, `重要`, `バグ`, `修正` ...
+
+### 🧹 Dedup & Entity Context
+
+- **Dedup**: Duplicate memories are automatically filtered out from search results and profile
+- **Entity Context**: Guides Supermemory on *what* to extract — user actions & decisions for personal scope, architecture & patterns for repo scope
+
+### ⏰ Context Re-injection
+
+```jsonc
+{
+  "reinjectEveryN": 10  // re-inject context every 10 messages
+}
+```
+
+Or say "recall" / "思い出して" to trigger immediate context refresh.
+
+## Configuration
+
+`~/.config/opencode/supermemory.jsonc`:
+
+```jsonc
+{
+  // Memory retrieval
+  "similarityThreshold": 0.6,
+  "maxMemories": 5,
+  "maxProjectMemories": 10,
+  "maxRepoMemories": 5,
+  "maxProfileItems": 5,
+
+  // Container tags (auto-generated if not set)
+  "containerTagPrefix": "opencode",
+  "userContainerTag": "my-custom-user-tag",
+  "projectContainerTag": "my-project-tag",
+  "repoContainerTag": "my-repo-tag",
+
+  // Context re-injection
+  "reinjectEveryN": 10,
+
+  // Signal extraction (disabled by default)
+  "signalExtraction": false,
+  "signalTurnsBefore": 3,
+
+  // Compaction
+  "compactionThreshold": 0.8,
+
+  // Extra keyword patterns (regex)
+  "keywordPatterns": ["log\\s+this"],
+  "recallKeywordPatterns": ["my custom recall"],
+  "signalKeywords": ["custom signal"]
+}
+```
 
 ## Tool Usage
 
 The `supermemory` tool is available to the agent:
 
-| Mode      | Args                         | Description       |
-| --------- | ---------------------------- | ----------------- |
-| `add`     | `content`, `type?`, `scope?` | Store memory      |
-| `search`  | `query`, `scope?`            | Search memories   |
-| `profile` | `query?`                     | View user profile |
-| `list`    | `scope?`, `limit?`           | List memories     |
-| `forget`  | `memoryId`, `scope?`         | Delete memory     |
+| Mode | Args | Description |
+|------|------|-------------|
+| `add` | `content`, `type?`, `scope?` | Store memory |
+| `search` | `query`, `scope?` | Search memories |
+| `profile` | `query?` | View user profile |
+| `list` | `scope?`, `limit?` | List memories |
+| `forget` | `memoryId`, `scope?` | Delete memory |
 
-**Scopes:** `user` (cross-project), `project` (default)
+**Scopes:** `user`, `project` (default), `repo`
 
-**Types:** `project-config`, `architecture`, `error-solution`, `preference`, `learned-pattern`, `conversation`
+## Privacy
 
-## Memory Scoping
+Content in `<private>` tags is never stored:
 
-| Scope   | Tag                                    | Persists     |
-| ------- | -------------------------------------- | ------------ |
-| User    | `opencode_user_{sha256(git email)}`    | All projects |
-| Project | `opencode_project_{sha256(directory)}` | This project |
-
-## Configuration
-
-Create `~/.config/opencode/supermemory.jsonc`:
-
-```jsonc
-{
-  // API key (can also use SUPERMEMORY_API_KEY env var)
-  "apiKey": "sm_...",
-
-  // Min similarity for memory retrieval (0-1)
-  "similarityThreshold": 0.6,
-
-  // Max memories injected per request
-  "maxMemories": 5,
-
-  // Max project memories listed
-  "maxProjectMemories": 10,
-
-  // Max profile facts injected
-  "maxProfileItems": 5,
-
-  // Include user profile in context
-  "injectProfile": true,
-
-  // Prefix for container tags (used when userContainerTag/projectContainerTag not set)
-  "containerTagPrefix": "opencode",
-
-  // Optional: Set exact user container tag (overrides auto-generated tag)
-  "userContainerTag": "my-custom-user-tag",
-
-  // Optional: Set exact project container tag (overrides auto-generated tag)
-  "projectContainerTag": "my-project-tag",
-
-  // Extra keyword patterns for memory detection (regex)
-  "keywordPatterns": ["log\\s+this", "write\\s+down"],
-
-  // Context usage ratio that triggers compaction (0-1)
-  "compactionThreshold": 0.8,
-}
 ```
-
-All fields optional. Env var `SUPERMEMORY_API_KEY` takes precedence over config file.
-
-### Container Tag Selection
-
-By default, container tags are auto-generated using `containerTagPrefix` plus a hash:
-
-- User tag: `{prefix}_user_{hash(git_email)}`
-- Project tag: `{prefix}_project_{hash(directory)}`
-
-You can override this by specifying exact container tags:
-
-```jsonc
-{
-  // Use a specific container tag for user memories
-  "userContainerTag": "my-team-workspace",
-
-  // Use a specific container tag for project memories
-  "projectContainerTag": "my-awesome-project",
-}
-```
-
-This is useful when you want to:
-
-- Share memories across team members (same `userContainerTag`)
-- Sync memories between different machines for the same project
-- Organize memories using your own naming scheme
-- Integrate with existing Supermemory container tags from other tools
-
-## Usage with Oh My OpenCode
-
-If you're using [Oh My OpenCode](https://github.com/code-yeongyu/oh-my-opencode), disable its built-in auto-compact hook to let supermemory handle context compaction:
-
-Add to `~/.config/opencode/oh-my-opencode.json`:
-
-```json
-{
-  "disabled_hooks": ["anthropic-context-window-limit-recovery"]
-}
+API key is <private>sk-abc123</private>
 ```
 
 ## Development
@@ -289,18 +198,13 @@ bun run build
 bun run typecheck
 ```
 
-Local install:
+## Upstream Sync
 
-```jsonc
-{
-  "plugin": ["file:///path/to/opencode-supermemory"],
-}
-```
-
-## Logs
+This fork tracks [supermemoryai/opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory):
 
 ```bash
-tail -f ~/.opencode-supermemory.log
+git fetch upstream
+git merge upstream/main
 ```
 
 ## License
