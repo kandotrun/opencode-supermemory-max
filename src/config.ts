@@ -26,6 +26,7 @@ interface SupermemoryConfig {
 }
 
 const DEFAULT_KEYWORD_PATTERNS = [
+  // English
   "remember",
   "memorize",
   "save\\s+this",
@@ -42,6 +43,18 @@ const DEFAULT_KEYWORD_PATTERNS = [
   "remember\\s+that",
   "never\\s+forget",
   "always\\s+remember",
+  // Japanese
+  "覚えて",
+  "記憶して",
+  "メモして",
+  "保存して",
+  "忘れないで",
+  "忘れるな",
+  "記録して",
+  "覚えておいて",
+  "メモっておいて",
+  "メモっといて",
+  "ノートして",
 ];
 
 const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "userContainerTag" | "projectContainerTag">> = {
