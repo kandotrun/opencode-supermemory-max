@@ -16,18 +16,28 @@ The official `opencode-supermemory` plugin is maintained by the Supermemory team
 
 ## What's different from upstream?
 
-| Feature | upstream | max |
-|---------|----------|-----|
-| Part ID fix (OpenCode v1.2.25+) | ❌ Broken | ✅ Fixed |
-| Japanese keywords (覚えて, メモして, etc.) | ❌ | ✅ 11 patterns |
-| Session-end auto-save | ❌ | ✅ Saves to all scopes |
-| Context re-injection | First message only | ✅ Periodic + keyword trigger |
-| Entity Context (extraction guidance) | ❌ | ✅ Personal + Repo contexts |
-| Dedup (no duplicate memories) | ❌ | ✅ Search + profile |
-| Relative time display | ❌ | ✅ "3hrs ago", "2d ago" |
-| Repo container tag (team sharing) | ❌ | ✅ 3-tier: user/project/repo |
-| Signal extraction (smart filtering) | ❌ | ✅ Keyword-based with context |
-| Recall keywords (思い出して, recall) | ❌ | ✅ Triggers context refresh |
+This plugin combines the best features from all three official Supermemory plugins:
+- [opencode-supermemory](https://github.com/supermemoryai/opencode-supermemory) (OpenCode plugin — base)
+- [claude-supermemory](https://github.com/supermemoryai/claude-supermemory) (Claude Code plugin — entity context, dedup, signal extraction, repo tags)
+- [openclaw-supermemory](https://github.com/supermemoryai/openclaw-supermemory) (OpenClaw plugin — incremental capture, metadata stripping, compaction hooks)
+
+| Feature | upstream | claude | openclaw | **max** |
+|---------|----------|--------|----------|---------|
+| Part ID fix (OpenCode v1.2.25+) | ❌ | — | — | ✅ |
+| Japanese keywords (覚えて, メモして) | ❌ | ❌ | ❌ | ✅ |
+| Incremental capture (crash-safe) | ❌ | ❌ | ✅ | ✅ |
+| Every-message recall | ❌ | ❌ | ✅ | ✅ |
+| Metadata stripping for queries | ❌ | ❌ | ✅ | ✅ |
+| Pre-compaction full save | ❌ | ❌ | ✅ | ✅ |
+| Post-compaction memory re-injection | ❌ | ❌ | ❌ | ✅ |
+| Entity Context (extraction guidance) | ❌ | ✅ | ❌ | ✅ |
+| Dedup (no duplicate memories) | ❌ | ✅ | ❌ | ✅ |
+| Relative time display | ❌ | ✅ | ❌ | ✅ |
+| Repo container tag (team sharing) | ❌ | ✅ | ❌ | ✅ |
+| Signal extraction (smart filtering) | ❌ | ✅ | ❌ | ✅ |
+| Context re-injection (periodic) | ❌ | ❌ | ❌ | ✅ |
+| Recall keywords (思い出して, recall) | ❌ | ❌ | ❌ | ✅ |
+| Session-end auto-save | ❌ | ✅ | ✅ | ✅ |
 
 ## Installation
 
