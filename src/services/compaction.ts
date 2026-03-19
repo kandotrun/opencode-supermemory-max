@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { supermemoryClient } from "./client.js";
 import { log } from "./logger.js";
 import { CONFIG } from "../config.js";
+import { generatePartId, generateMessageId } from "./ids.js";
 
 const MESSAGE_STORAGE = join(homedir(), ".opencode", "messages");
 const PART_STORAGE = join(homedir(), ".opencode", "parts");
@@ -150,18 +151,6 @@ function findNearestMessageWithFields(messageDir: string): StoredMessage | null 
     return null;
   }
   return null;
-}
-
-function generateMessageId(): string {
-  const timestamp = Date.now().toString(16);
-  const random = Math.random().toString(36).substring(2, 14);
-  return `msg_${timestamp}${random}`;
-}
-
-function generatePartId(): string {
-  const timestamp = Date.now().toString(16);
-  const random = Math.random().toString(36).substring(2, 10);
-  return `prt_${timestamp}${random}`;
 }
 
 function injectHookMessage(
