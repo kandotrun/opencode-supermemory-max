@@ -23,6 +23,10 @@ interface SupermemoryConfig {
   filterPrompt?: string;
   keywordPatterns?: string[];
   compactionThreshold?: number;
+  /** Re-inject context every N messages. 0 = first message only (default). */
+  reinjectEveryN?: number;
+  /** Keywords that trigger immediate context re-injection. */
+  recallKeywordPatterns?: string[];
 }
 
 const DEFAULT_KEYWORD_PATTERNS = [
@@ -57,6 +61,19 @@ const DEFAULT_KEYWORD_PATTERNS = [
   "ノートして",
 ];
 
+const DEFAULT_RECALL_KEYWORD_PATTERNS = [
+  // English
+  "recall",
+  "what\\s+do\\s+you\\s+remember",
+  "check\\s+memory",
+  "search\\s+memory",
+  // Japanese
+  "思い出して",
+  "記憶を?検索",
+  "メモリ[ーを]?確認",
+  "何か覚えてる",
+];
+
 const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "userContainerTag" | "projectContainerTag">> = {
   similarityThreshold: 0.6,
   maxMemories: 5,
@@ -67,6 +84,8 @@ const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "userContainerTag" |
   filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details.",
   keywordPatterns: [],
   compactionThreshold: 0.80,
+  reinjectEveryN: 0,
+  recallKeywordPatterns: [],
 };
 
 function isValidRegex(pattern: string): boolean {
@@ -127,6 +146,11 @@ export const CONFIG = {
     ...(fileConfig.keywordPatterns ?? []).filter(isValidRegex),
   ],
   compactionThreshold: validateCompactionThreshold(fileConfig.compactionThreshold),
+  reinjectEveryN: fileConfig.reinjectEveryN ?? DEFAULTS.reinjectEveryN,
+  recallKeywordPatterns: [
+    ...DEFAULT_RECALL_KEYWORD_PATTERNS,
+    ...(fileConfig.recallKeywordPatterns ?? []).filter(isValidRegex),
+  ],
 };
 
 export function isConfigured(): boolean {
