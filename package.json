@@ -1,48 +1,48 @@
 {
-	"name": "opencode-supermemory",
-	"version": "2.0.4",
-	"description": "OpenCode plugin that gives coding agents persistent memory using Supermemory",
-	"type": "module",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
-	"bin": {
-		"opencode-supermemory": "./dist/cli.js"
-	},
-	"scripts": {
-		"build": "bun build ./src/index.ts --outdir ./dist --target node && bun build ./src/cli.ts --outfile ./dist/cli.js --target node && tsc --emitDeclarationOnly",
-		"dev": "tsc --watch",
-		"typecheck": "tsc --noEmit"
-	},
-	"keywords": [
-		"opencode",
-		"plugin",
-		"supermemory",
-		"memory",
-		"ai",
-		"coding-agent"
-	],
-	"author": "Supermemory",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/supermemoryai/opencode-supermemory"
-	},
-	"dependencies": {
-		"@opencode-ai/plugin": "^1.0.162",
-		"supermemory": "^4.0.0"
-	},
-	"devDependencies": {
-		"@types/bun": "latest",
-		"typescript": "^5.7.3"
-	},
-	"opencode": {
-		"type": "plugin",
-		"hooks": [
-			"chat.message",
-			"event"
-		]
-	},
-	"files": [
-		"dist"
-	]
+  "name": "opencode-supermemory",
+  "version": "2.0.5",
+  "description": "OpenCode plugin that gives coding agents persistent memory using Supermemory",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "opencode-supermemory": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node && bun build ./src/cli.ts --outfile ./dist/cli.js --target node && tsc --emitDeclarationOnly",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "supermemory",
+    "memory",
+    "ai",
+    "coding-agent"
+  ],
+  "author": "Supermemory",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supermemoryai/opencode-supermemory"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.0.162",
+    "supermemory": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.3"
+  },
+  "opencode": {
+    "type": "plugin",
+    "hooks": [
+      "chat.message",
+      "event"
+    ]
+  },
+  "files": [
+    "dist"
+  ]
 }
