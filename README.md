@@ -11,7 +11,7 @@ The official `opencode-supermemory` plugin is maintained by the Supermemory team
 - **Aggressive memory utilization** — save more, recall more, lose nothing
 - **Bug fixes shipped fast** — no 2-week PR review waits
 - **Feature parity with claude-supermemory** — all the good stuff from the Claude Code plugin, ported to OpenCode
-- **Japanese language support** — keyword detection and signal extraction work in both English and Japanese
+- **Multi-language support** — keyword detection and signal extraction work in English, Japanese, and Chinese (Simplified + Traditional)
 - **Upstream tracking** — good changes from upstream get merged in
 
 ## What's different from upstream?
@@ -25,6 +25,7 @@ This plugin combines the best features from all three official Supermemory plugi
 |---------|----------|--------|----------|---------|
 | Part ID fix (OpenCode v1.2.25+) | ❌ | — | — | ✅ |
 | Japanese keywords (覚えて, メモして) | ❌ | ❌ | ❌ | ✅ |
+| Chinese keywords (记住, 修复, 设计) | ❌ | ❌ | ❌ | ✅ |
 | Incremental capture (crash-safe) | ❌ | ❌ | ✅ | ✅ |
 | Every-message recall | ❌ | ❌ | ✅ | ✅ |
 | Metadata stripping for queries | ❌ | ❌ | ✅ | ✅ |
@@ -36,7 +37,7 @@ This plugin combines the best features from all three official Supermemory plugi
 | Repo container tag (team sharing) | ❌ | ✅ | ❌ | ✅ |
 | Signal extraction (smart filtering) | ❌ | ✅ | ❌ | ✅ |
 | Context re-injection (periodic) | ❌ | ❌ | ❌ | ✅ |
-| Recall keywords (思い出して, recall) | ❌ | ❌ | ❌ | ✅ |
+| Recall keywords (思い出して, 想起来, recall) | ❌ | ❌ | ❌ | ✅ |
 | Session-end auto-save | ❌ | ✅ | ✅ | ✅ |
 
 ## Installation
@@ -97,14 +98,14 @@ Relevant Memories:
 - [3d ago] Build fails if .env.local missing [82%]
 ```
 
-### 🇯🇵 Japanese + English Keywords
+### 🌐 Multi-language Keywords
 
-Memory triggers work in both languages:
+Memory triggers work in English, Japanese, and Chinese:
 
-| English | Japanese |
-|---------|----------|
-| remember, save this | 覚えて, メモして, 保存して |
-| recall, check memory | 思い出して, メモリ確認 |
+| English | Japanese | Chinese |
+|---------|----------|---------|
+| remember, save this | 覚えて, メモして, 保存して | 记住, 记下, 保存下来 |
+| recall, check memory | 思い出して, メモリ確認 | 想起来, 检查记忆 |
 
 ### 📦 3-Tier Memory Scopes
 
@@ -125,7 +126,7 @@ When enabled, only saves session turns containing important keywords — no nois
 }
 ```
 
-Built-in signal keywords: `implementation`, `architecture`, `decision`, `bug`, `fix`, `実装`, `設計`, `重要`, `バグ`, `修正` ...
+Built-in signal keywords: `implementation`, `architecture`, `decision`, `bug`, `fix`, `実装`, `設計`, `重要`, `バグ`, `修正`, `实现`, `架构`, `修复`, `设计` ...
 
 ### 🧹 Dedup & Entity Context
 
@@ -140,7 +141,7 @@ Built-in signal keywords: `implementation`, `architecture`, `decision`, `bug`, `
 }
 ```
 
-Or say "recall" / "思い出して" to trigger immediate context refresh.
+Or say "recall" / "思い出して" / "想起来" to trigger immediate context refresh.
 
 ## Configuration
 

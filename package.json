@@ -1,7 +1,7 @@
 {
   "name": "opencode-supermemory-max",
   "version": "2.1.0",
-  "description": "Enhanced OpenCode memory plugin — Japanese support, incremental capture, signal extraction, 3-tier scopes, dedup, entity context. Fork of opencode-supermemory with aggressive memory maximization.",
+  "description": "Enhanced OpenCode memory plugin — Japanese & Chinese (Simplified+Traditional) keyword support, incremental capture, signal extraction, 3-tier scopes, dedup, entity context. Fork of opencode-supermemory with aggressive memory maximization.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,6 +21,7 @@
     "ai",
     "coding-agent",
     "japanese",
+    "chinese",
     "incremental-capture",
     "signal-extraction"
   ],

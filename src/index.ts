@@ -17,8 +17,18 @@ import type { MemoryScope, MemoryType } from "./types/index.js";
 const CODE_BLOCK_PATTERN = /```[\s\S]*?```/g;
 const INLINE_CODE_PATTERN = /`[^`]+`/g;
 
-const MEMORY_KEYWORD_PATTERN = new RegExp(`\\b(${CONFIG.keywordPatterns.join("|")})\\b`, "i");
-const RECALL_KEYWORD_PATTERN = new RegExp(`\\b(${CONFIG.recallKeywordPatterns.join("|")})\\b`, "i");
+// CJK characters are not ASCII "word" chars, so \b never fires around them.
+// Wrap ASCII-only patterns with \b...\b; let CJK patterns match as plain substrings.
+const wrapWordBoundary = (p: string): string =>
+  /^[\x00-\x7F]+$/.test(p) ? `\\b${p}\\b` : p;
+const MEMORY_KEYWORD_PATTERN = new RegExp(
+  `(${CONFIG.keywordPatterns.map(wrapWordBoundary).join("|")})`,
+  "i",
+);
+const RECALL_KEYWORD_PATTERN = new RegExp(
+  `(${CONFIG.recallKeywordPatterns.map(wrapWordBoundary).join("|")})`,
+  "i",
+);
 
 const MEMORY_NUDGE_MESSAGE = `[MEMORY TRIGGER DETECTED]
 The user wants you to remember something. You MUST use the \`supermemory\` tool with \`mode: "add"\` to save this information.
